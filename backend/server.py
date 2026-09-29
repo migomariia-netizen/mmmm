@@ -2,6 +2,7 @@ import os
 import asyncio
 import logging
 import random
+import re
 import string
 import time
 from datetime import datetime, timezone, timedelta
@@ -47,6 +48,18 @@ def now_ts() -> int:
 
 def gen_id(n=8) -> str:
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
+
+
+def client_ip_of(request: Request) -> str:
+    """Real client IP behind the k8s ingress: first entry of X-Forwarded-For,
+    then X-Real-IP, then the socket peer."""
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    xri = request.headers.get("x-real-ip", "")
+    if xri:
+        return xri.strip()
+    return request.client.host if request.client else ""
 
 
 async def next_index(chain: str) -> int:
@@ -160,6 +173,7 @@ async def get_merchant(user_id: str) -> dict:
             "merchant_id": int(now_ts()), "user_id": user_id, "name": "My Merchant",
             "home_url": "", "result_url": "", "token": new_token(), "secret": new_secret(),
             "brand_color": "#2563EB", "logo_url": "", "description": "", "is_default": True,
+            "allowed_ips": [],
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.merchants.insert_one(dict(m))
@@ -183,37 +197,56 @@ def invoice_public(inv: dict) -> dict:
         "time_create", "time_expired", "pay_info", "amount_paid", "usd_value"]}
 
 
+# Map internal invoice statuses to the vocabulary the receiver (BoxExchanger
+# fozpay module) accepts (it lowercases and checks against
+# paid/overpayment/canceled/deleted/error/expired/partially).
+WEBHOOK_STATUS_MAP = {"Completed": "Paid", "Cancelled": "Canceled", "In Process": "Partially"}
+
+
+def webhook_status(s: str) -> str:
+    return WEBHOOK_STATUS_MAP.get(s, s)
+
+
+def webhook_headers(merchant: dict, sign: str) -> dict:
+    # The receiver reads req.headers["token"] and req.headers["sign"] (lowercase).
+    # X-Auth-* kept for backward compatibility with other integrators.
+    return {
+        "Content-Type": "application/json",
+        "token": merchant.get("token", ""),
+        "sign": sign,
+        "X-Auth-Token": merchant.get("token", ""),
+        "X-Auth-Sign": sign,
+        "User-Agent": "FozPay-Webhook/1.0",
+    }
+
+
 async def send_webhook(merchant: dict, inv: dict, cur_iso=None, amount=0.0):
     url = merchant.get("result_url")
     if not url:
         logger.info(f"webhook skip inv={inv.get('id')}: merchant has NO result_url configured")
         return
     rate = PRICES_USD.get(cur_iso, 0.0) if cur_iso else 0.0
+    status = webhook_status(inv["status"])
     payload = {
         "id": inv["id"], "order_id": inv["order_id"], "currency": cur_iso or "",
-        "payment_currency": inv["payment_currency_iso"], "status": inv["status"],
+        "payment_currency": inv["payment_currency_iso"], "status": status,
         "amount": amount, "amount_send": amount, "price": inv["price"],
         "price_send": round(amount * rate, 2), "rate": rate,
-        "total_sum_price": round(amount * rate, 2), "commission": 0,
+        # total_sum_price is the accepted amount the receiver compares to its
+        # expected order amount — it must be the crypto amount actually paid.
+        "total_sum_price": amount, "commission": 0,
         "address": (inv.get("pay_info") or {}).get("address", ""),
         "network_type": (inv.get("pay_info") or {}).get("network", ""),
         "time_create": inv["time_create"], "time_update": now_ts(),
-        "time_done": now_ts() if inv["status"] in ("Paid", "Completed", "Overpayment") else None,
+        "time_done": now_ts() if status in ("Paid", "Overpayment") else None,
         "time_expired": inv.get("time_expired"), "time_send": now_ts(),
         "time_receive": None, "include_commission": inv.get("include_commission", 0),
     }
-    # Sign the webhook exactly like the merchant API signs requests, so ewex-style
-    # receivers that verify X-Auth-Sign / X-Auth-Token accept the callback.
     try:
         sign = make_signature(payload, merchant.get("secret", ""))
     except Exception:
         sign = ""
-    headers = {
-        "Content-Type": "application/json",
-        "X-Auth-Token": merchant.get("token", ""),
-        "X-Auth-Sign": sign,
-        "User-Agent": "FozPay-Webhook/1.0",
-    }
+    headers = webhook_headers(merchant, sign)
     last_err = None
     for attempt in range(1, 4):
         try:
@@ -680,6 +713,7 @@ class MerchantIn(BaseModel):
     auto_swap: bool = None
     auto_swap_to: str = None
     fees: dict = None
+    allowed_ips: list = None
 
 
 @cab.get("/merchant")
@@ -693,6 +727,12 @@ async def merchant_update(request: Request, payload: MerchantIn):
     user = await get_current_user(request)
     await get_merchant(user["user_id"])
     upd = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if "allowed_ips" in upd:
+        # Accept a list or a comma/space/newline-separated string; sanitize entries.
+        raw = upd["allowed_ips"]
+        if isinstance(raw, str):
+            raw = re.split(r"[\s,]+", raw)
+        upd["allowed_ips"] = [ip.strip() for ip in raw if isinstance(ip, str) and ip.strip()]
     if upd:
         await db.merchants.update_one({"user_id": user["user_id"]}, {"$set": upd})
     return {"status": True, "data": await get_merchant(user["user_id"])}
@@ -726,8 +766,7 @@ async def merchant_test_webhook(request: Request):
         "include_commission": 0, "test": True,
     }
     sign = make_signature(payload, merchant.get("secret", ""))
-    headers = {"Content-Type": "application/json", "X-Auth-Token": merchant.get("token", ""),
-               "X-Auth-Sign": sign, "User-Agent": "FozPay-Webhook/1.0"}
+    headers = webhook_headers(merchant, sign)
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as c:
             r = await c.post(url, json=payload, headers=headers)
@@ -852,6 +891,13 @@ async def auth_merchant(request: Request):
     merchant = await db.merchants.find_one({"token": token}, {"_id": 0})
     if not merchant:
         raise HTTPException(401, "Your request was made with invalid credentials.NONE headers")
+    # IP allow-list: if the merchant configured allowed IPs, only those may call the API.
+    allowed = merchant.get("allowed_ips") or []
+    if allowed:
+        client_ip = client_ip_of(request)
+        if client_ip not in allowed:
+            logger.warning(f"merchant API blocked ip={client_ip} token=...{token[-6:]}")
+            raise HTTPException(403, f"IP {client_ip} is not allowed for this merchant")
     body = {}
     if request.method == "POST":
         try:

@@ -35,7 +35,7 @@ export default function Settings() {
         name: m.name, home_url: m.home_url, result_url: m.result_url,
         brand_color: m.brand_color, description: m.description,
         auto_swap: !!m.auto_swap, auto_swap_to: m.auto_swap_to || "USDT",
-        fees: m.fees || {},
+        fees: m.fees || {}, allowed_ips: m.allowed_ips || [],
       });
       setM(data.data); toast.success(t("saved"));
     } catch (e) { toast.error(apiErr(e)); }
@@ -107,8 +107,21 @@ export default function Settings() {
                       <Input data-testid="merchant-result-url" value={m.result_url || ""} onChange={(e) => setM({ ...m, result_url: e.target.value })} className="rounded-xl mt-1" placeholder="https://site.com/webhook" />
                       <div className="mt-2">
                         <Button size="sm" variant="outline" data-testid="test-webhook-btn" onClick={testWebhook} className="rounded-full border-slate-300">Надіслати тестовий вебхук</Button>
-                        <p className="text-[11px] text-slate-400 mt-1">Надішле підписаний тестовий POST (X-Auth-Token + X-Auth-Sign) на цей URL, щоб перевірити прийом сповіщень.</p>
+                        <p className="text-[11px] text-slate-400 mt-1">Надішле підписаний тестовий POST (заголовки token + sign) на цей URL, щоб перевірити прийом сповіщень.</p>
                       </div>
+                    </div>
+                    <div><Label>Дозволені IP (whitelist для API)</Label>
+                      <Textarea
+                        data-testid="merchant-allowed-ips"
+                        value={(m.allowed_ips || []).join(", ")}
+                        onChange={(e) => setM({ ...m, allowed_ips: e.target.value.split(/[\s,]+/).filter(Boolean) })}
+                        className="rounded-xl mt-1 font-mono text-xs"
+                        rows={2}
+                        placeholder="72.60.34.27, 1.2.3.4"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Якщо список не порожній — merchant API (створення інвойсів, виводи) прийматиме запити ТІЛЬКИ з цих IP-адрес. Розділяйте комою або пробілом. Порожньо = дозволені всі.
+                      </p>
                     </div>
                     <div><Label>{t("token")}</Label>
                       <div className="mt-1 flex items-center gap-2 rounded-xl border border-slate-200 p-2">
