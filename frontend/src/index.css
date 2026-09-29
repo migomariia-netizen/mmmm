@@ -1,0 +1,127 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foz-1: #7c3aed;
+  --foz-2: #a855f7;
+  --foz-3: #c026d3;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #1e1b2e;
+  min-height: 100vh;
+  background:
+    radial-gradient(1100px 700px at 12% -8%, rgba(168, 85, 247, 0.28), transparent 60%),
+    radial-gradient(1000px 650px at 100% 0%, rgba(192, 38, 211, 0.20), transparent 55%),
+    radial-gradient(900px 700px at 50% 120%, rgba(124, 58, 237, 0.22), transparent 60%),
+    linear-gradient(135deg, #f6f2ff 0%, #efe9ff 45%, #f7f0ff 100%);
+  background-attachment: fixed;
+}
+
+h1, h2, h3, .font-display { font-family: 'Sora', 'Manrope', sans-serif; letter-spacing: -0.02em; }
+code, .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+@layer base {
+  :root {
+    --background: 265 60% 98%;
+    --foreground: 258 40% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 258 40% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 258 40% 14%;
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 265 40% 96%;
+    --secondary-foreground: 258 40% 14%;
+    --muted: 265 40% 96%;
+    --muted-foreground: 258 12% 45%;
+    --accent: 270 60% 95%;
+    --accent-foreground: 258 40% 14%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 265 40% 90%;
+    --input: 265 40% 90%;
+    --ring: 262 83% 58%;
+    --radius: 0.9rem;
+  }
+  * { @apply border-border; }
+}
+
+/* ============ Glassmorphism surfaces ============ */
+.glass {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 32px rgba(88, 28, 135, 0.10);
+}
+.glass-dark {
+  background: linear-gradient(160deg, rgba(46, 16, 84, 0.92), rgba(30, 12, 60, 0.92));
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+}
+
+/* ============ Global re-skin (purple + frosted glass) ============ */
+/* Turn the app's white card surfaces into frosted glass */
+.bg-white {
+  background-color: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+}
+.shadow-sm, .shadow-xl { box-shadow: 0 10px 34px rgba(88, 28, 135, 0.10) !important; }
+.border-slate-100 { border-color: rgba(168, 85, 247, 0.16) !important; }
+.border-slate-200 { border-color: rgba(168, 85, 247, 0.20) !important; }
+
+/* Accent recolor: every blue accent in the codebase becomes violet/fuchsia */
+.bg-blue-600 { background-color: #7c3aed !important; }
+.hover\:bg-blue-700:hover { background-color: #6d28d9 !important; }
+.text-blue-600 { color: #7c3aed !important; }
+.hover\:text-blue-600:hover { color: #7c3aed !important; }
+.bg-blue-50, .bg-blue-50\/60 { background-color: rgba(245, 243, 255, 0.7) !important; }
+.border-blue-100 { border-color: #ddd6fe !important; }
+.text-blue-900 { color: #4c1d95 !important; }
+.text-blue-800, .text-blue-800\/80 { color: #5b21b6 !important; }
+.text-blue-100 { color: #ede9fe !important; }
+.from-blue-500 {
+  --tw-gradient-from: #8b5cf6 var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgb(139 92 246 / 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+.to-indigo-600 { --tw-gradient-to: #c026d3 var(--tw-gradient-to-position) !important; }
+
+/* Inputs / selects a touch frosted */
+input, textarea { background-color: rgba(255,255,255,0.65); }
+
+/* ============ Scrollbar ============ */
+.oki-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.oki-scroll::-webkit-scrollbar-thumb { background: rgba(124,58,237,0.35); border-radius: 8px; }
+::selection { background: rgba(124, 58, 237, 0.25); }
+
+/* ============ Motion ============ */
+@keyframes oki-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.oki-fade-up { animation: oki-fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes foz-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.foz-float { animation: foz-float 6s ease-in-out infinite; }
+
+.foz-grad-text {
+  background: linear-gradient(120deg, #7c3aed, #c026d3 60%, #a855f7);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
