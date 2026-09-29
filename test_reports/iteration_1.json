@@ -1,0 +1,23 @@
+{
+  "summary": "Backend-only regression for FozPay iteration 3 (JS-parity webhook signature + lowercase token/sign headers, IP allow-list enforcement, and regressions). Created /app/backend/tests/test_iter3_signature_ipallow.py with 9 tests covering: admin login + merchant fields, signed pay-in with JS-parity signature (bool->true/false, integral floats->no decimals), test-webhook to httpbin echoing lowercase `token`+`sign` headers with 64-hex sign, empty result_url -> 400 Ukrainian, unreachable host -> status:false without crash, IP allow-list 403/200 flow via X-Forwarded-For, and regressions on /api/currencies, /api/invoices (GET+POST). All 9/9 passed on the public REACT_APP_BACKEND_URL. Post-test cleanup verified: result_url='' and allowed_ips=[] restored.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter3_signature_ipallow.py",
+    "/app/test_reports/pytest/iter3_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 1786 lines — consider splitting into modules (auth, merchant cabinet, private /v1, webhooks) for maintainability.",
+    "webhook_headers() sends both lowercase token/sign AND legacy X-Auth-Token/X-Auth-Sign — good backward compatibility, but document that new integrators should read lowercase.",
+    "auth_merchant() reads X-Forwarded-For directly; behind untrusted proxies this can be spoofed. Behind the k8s ingress this is fine, but consider trusting only the LAST hop or a configured proxy count for defense-in-depth."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "n/a"},
+  "test_credentials": "admin@fozpay.io / FozPay#Admin2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Test invoices/orders use TEST_ITER3_ prefix.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 3 fixes verified: (1) core.py _js_scalar/_concat_values produce JS-compatible bytes for sha256 signing; pay-in with signed body returned 200 and pay_info.address. (2) webhook_headers() sends lowercase `token` and `sign` (verified via httpbin echo). (3) IP allow-list enforcement works via X-Forwarded-For: '9.9.9.9' -> 403, '72.60.34.27' -> 200; cleared list restores open access. Regressions on /currencies and /invoices still pass. Merchant state was reset to allowed_ips=[] and result_url='' at the end.",
+  "rca of the issue": "N/A — fixes verified working. Previously webhook receiver (ewex fozpay) returned HTTP 500 because it read lowercase headers `token`/`sign` and computed sha256 with JS join semantics (bool->'true'/'false', integral-float->no decimals, null->''). The clone was sending X-Auth-* only and using Python str() semantics ('1'/'0', '3.0'). core._js_scalar + webhook_headers() now match JS exactly."
+}
